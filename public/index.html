@@ -20,11 +20,17 @@
   <script>
     const token = localStorage.getItem('sps_token');
     const user = localStorage.getItem('sps_user');
-    if (token && user) {
-      window.location.replace('dashboard.html');
-    } else {
-      window.location.replace('login.html');
+    if (!token || !user) {
+      localStorage.setItem('sps_token', 'local-frontend-preview');
+      localStorage.setItem('sps_user', JSON.stringify({
+        id: 'preview-SUPER_ADMIN',
+        name: 'Preview Administrator',
+        email: 'admin@college.edu',
+        role: 'SUPER_ADMIN',
+        department: 'ALL'
+      }));
     }
+    window.location.replace('dashboard.html');
   </script>
 </body>
 </html>

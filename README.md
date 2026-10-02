@@ -30,7 +30,7 @@ The **Student Academic Personal and Career Profiling System (SPS)** solves this 
 ### Backend
 - **Node.js**: Asynchronous event-driven server runtime.
 - **Express.js 4.21**: Robust REST API framework with modular controllers and middleware.
-- **Mongoose 8.9**: Strongly-typed schemas, subdocuments, and data validation for MongoDB.
+- **node-postgres (`pg`)**: Parameterized PostgreSQL queries for Supabase-hosted storage.
 - **Security & Utilities**:
   - `bcryptjs`: Secure one-way salt hashing for passwords.
   - `jsonwebtoken` (JWT): Stateless authentication for protected routes.
@@ -38,10 +38,9 @@ The **Student Academic Personal and Career Profiling System (SPS)** solves this 
   - `express-rate-limit`: Brute-force and DDoS protection.
   - `morgan`: Request logging for development auditing.
   - `cors`: Cross-origin request control.
-  - `mongodb-memory-server`: Built-in zero-configuration embedded MongoDB fallback for instantaneous local demonstration without requiring a pre-installed database service.
 
 ### Database
-- **MongoDB**: Schema-flexible document database. Supports local `mongod`, MongoDB Atlas, or built-in in-memory fallback.
+- **Supabase PostgreSQL**: Relational user, student, application, settings, and audit tables; full student profiles are stored as JSONB.
 
 ---
 
@@ -57,7 +56,8 @@ d:/full stack poject/
 ├── README.md                      # Complete system documentation
 │
 ├── config/
-│   └── db.js                      # MongoDB connection & embedded fallback
+│   ├── postgres.js                # Supabase PostgreSQL pool and initialization
+│   └── schema.sql                 # PostgreSQL table/index definitions
 │
 ├── models/
 │   ├── User.js                    # Faculty and Admin user accounts
@@ -76,7 +76,8 @@ d:/full stack poject/
 │
 ├── controllers/
 │   ├── authController.js          # Login, logout, and current user
-│   ├── studentController.js       # Student CRUD, semesters, arrears, interventions
+│   ├── postgresStudentController.js # Student CRUD, semesters, arrears, interventions
+│   ├── studentApplicationController.js # Application submission and review
 │   ├── insightController.js       # Dashboard KPIs, analytics, and comparison
 │   ├── auditController.js         # Admin audit log query handler
 │   └── reportController.js        # CSV report generator
@@ -89,8 +90,7 @@ d:/full stack poject/
 │   └── reportRoutes.js            # /api/reports/export
 │
 ├── seed/
-│   ├── seed.js                    # Standalone database seed script
-│   └── seedDataHelper.js          # Reusable seed data for server auto-init
+│   └── postgresSeed.js            # Safe schema/bootstrap-admin setup
 │
 ├── test/
 │   └── api-test.js                # Integration test suite for all REST APIs
@@ -100,7 +100,8 @@ d:/full stack poject/
     ├── login.html                 # Faculty & Mentor login page
     ├── dashboard.html             # 10 KPI summary cards & 6 Chart.js graphs
     ├── students.html              # Search, filter, compare, and manage students
-    ├── add-student.html           # 8-step wizard for profile registration
+   ├── add-student.html           # 8-step Student Application Form
+   ├── student-applications.html  # Staff application review queue
     ├── edit-student.html          # Prepopulated profile editor
     ├── student-profile.html       # Full profile view, trend graph, skill gap
     ├── analytics.html             # College-wide analytics and readiness charts
@@ -130,8 +131,8 @@ d:/full stack poject/
 ## 4. Installation & Setup
 
 ### Prerequisites
-- [Node.js](https://nodejs.org/) (v16.x or higher)
-- Optional: Local MongoDB or MongoDB Atlas connection string (if not provided, the embedded zero-config database runs automatically).
+- [Node.js](https://nodejs.org/) (v18.x or higher)
+- A Supabase PostgreSQL project and a database password that has not been exposed publicly.
 
 ### Step 1: Install Dependencies
 ```bash
@@ -143,23 +144,26 @@ Copy `.env.example` to `.env`:
 ```bash
 cp .env.example .env
 ```
-Default `.env` settings:
+Set these values in `.env`. Do not commit or share this file:
 ```env
 PORT=5000
 NODE_ENV=development
-MONGODB_URI=mongodb://127.0.0.1:27017/student_profiling_system
-JWT_SECRET=college_student_profiling_jwt_secret_key_viva_2026_secure
+DATABASE_URL=postgresql://postgres:<new_password>@db.eciyodhjeifsxmgmjmoy.supabase.co:5432/postgres?sslmode=require
+JWT_SECRET=<long-random-secret>
 JWT_EXPIRES_IN=7d
+INITIAL_ADMIN_NAME=System Administrator
+INITIAL_ADMIN_EMAIL=admin@example.com
+INITIAL_ADMIN_PASSWORD=<strong-one-time-password>
 ATTENDANCE_ATTENTION_THRESHOLD=75
 CGPA_ATTENTION_THRESHOLD=6.5
 ```
+Replace placeholders locally. URL-encode reserved characters in the database password. The first server start creates the schema and creates the initial super-admin only when the `users` table is empty.
 
-### Step 3: Seed Demo Data
-To seed realistic synthetic students and mentor accounts:
+### Step 3: Initialize PostgreSQL
+To create the schema and optional initial administrator without deleting existing records:
 ```bash
 npm run seed
 ```
-*(Note: When running in embedded in-memory mode, the server also auto-seeds these records if the database is newly initialized).*
 
 ### Step 4: Start the Server
 ```bash
@@ -170,21 +174,16 @@ Terminal output:
 ======================================================
 Student Academic Personal and Career Profiling System
 Server running in development mode on http://localhost:5000
-Ready for college faculty & mentor access.
+PostgreSQL connected; database schema initialized.
 ======================================================
 ```
 Open your browser at: `http://localhost:5000`
 
 ---
 
-## 5. Demo Login Credentials
+## 5. Student Applications
 
-| Role | Email | Password | Access Privileges |
-| :--- | :--- | :--- | :--- |
-| **Faculty / Mentor** | `faculty@college.edu` | `Mentor@123` | Dashboard, Students Directory, Add Student, Student Profile, Arrears, Analytics, Mentor Interventions, Reports |
-| **Admin (HOD)** | `admin@college.edu` | `Admin@123` | All Faculty features + Security Audit Logs, Delete Students, System Settings |
-
-> **Viva Tip:** On the login page (`login.html`), click the quick buttons **"Faculty / Mentor"** or **"Admin (HOD)"** to instantly populate credentials.
+Staff users with student-create permissions can submit the existing eight-step profile as an application. Applications are stored in `student_applications` with `PENDING` status. The review queue allows authorized staff to approve or reject them; approval creates the active student profile in a transaction. Staff accounts are provisioned through the initial-admin environment variables or the protected user-management API.
 
 ---
 

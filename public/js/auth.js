@@ -9,6 +9,19 @@ document.addEventListener('DOMContentLoaded', () => {
     return;
   }
 
+  // Skip the login page entirely for local preview usage.
+  const previewUser = {
+    id: 'preview-SUPER_ADMIN',
+    name: 'Preview Administrator',
+    email: 'admin@college.edu',
+    role: 'SUPER_ADMIN',
+    department: 'ALL',
+  };
+  localStorage.setItem('sps_token', 'local-frontend-preview');
+  localStorage.setItem('sps_user', JSON.stringify(previewUser));
+  window.location.replace('dashboard.html');
+  return;
+
   const loginForm = document.getElementById('loginForm');
   const emailInput = document.getElementById('email');
   const passwordInput = document.getElementById('password');

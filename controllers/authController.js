@@ -1,7 +1,6 @@
 const jwt = require('jsonwebtoken');
-const User = require('../models/User');
-const Student = require('../models/Student');
-const AuditLog = require('../models/AuditLog');
+const bcrypt = require('bcryptjs');
+const { pool } = require('../config/postgres');
 const { normalizeRole } = require('../config/permissions');
 
 // Generate JWT token
@@ -29,33 +28,14 @@ const login = async (req, res, next) => {
 
     const input = email.trim().toLowerCase();
 
-    // 1. Check for user by email or register number
-    let user = await User.findOne({
-      $or: [
-        { email: input },
-        { registerNumber: input },
-        { registerNumber: input.toUpperCase() },
-      ],
-    }).select('+password');
-
-    // Student accounts must be provisioned by SUPER_ADMIN through /api/users.
-    if (!user) {
-      const student = await Student.findOne({
-        $or: [
-          { 'personalDetails.registerNumber': input.toUpperCase() },
-          { 'personalDetails.registerNumber': input },
-          { 'personalDetails.institutionalEmail': input },
-          { 'personalDetails.personalEmail': input },
-        ],
-      });
-
-      if (student) {
-        // Allow student login with password 'Student@123' or their register number
-        if (password === 'Student@123' || password.toUpperCase() === student.personalDetails.registerNumber.toUpperCase()) {
-          user = await User.findOne({ email: student.personalDetails.institutionalEmail }).select('+password');
-        }
-      }
-    }
+    const { rows } = await pool.query(
+      `SELECT id, name, email, password_hash, role, department, register_number, student_profile_id
+       FROM users
+       WHERE lower(email) = $1 OR lower(register_number) = $1
+       LIMIT 1`,
+      [input]
+    );
+    const user = rows[0];
 
     if (!user) {
       return res.status(401).json({
@@ -65,7 +45,7 @@ const login = async (req, res, next) => {
     }
 
     // Check password
-    const isMatch = await user.comparePassword(password);
+    const isMatch = await bcrypt.compare(password, user.password_hash);
     if (!isMatch) {
       return res.status(401).json({
         success: false,
@@ -73,32 +53,12 @@ const login = async (req, res, next) => {
       });
     }
 
-    // If student user has no studentProfileId, dynamically attach it
-    if (user.role === 'student' && !user.studentProfileId) {
-      const studentRec =
-        (await Student.findOne({
-          $or: [
-            { 'personalDetails.registerNumber': user.registerNumber },
-            { 'personalDetails.institutionalEmail': user.email },
-          ],
-        })) || (await Student.findOne());
-      if (studentRec) {
-        user.studentProfileId = studentRec._id;
-        await User.findByIdAndUpdate(user._id, { studentProfileId: studentRec._id });
-      }
-    }
-
-    const token = generateToken(user._id);
-
-    // Audit log
-    await AuditLog.create({
-      userId: user._id,
-      userName: user.name,
-      userRole: user.role,
-      action: 'LOGIN',
-      details: `User ${user.email} (${user.role.toUpperCase()}) logged in successfully`,
-      ipAddress: req.ip || req.connection.remoteAddress || '',
-    });
+    const token = generateToken(user.id);
+    await pool.query(
+      `INSERT INTO audit_logs (user_id, user_name, user_role, action, details, ip_address)
+       VALUES ($1, $2, $3, 'LOGIN', $4, $5)`,
+      [user.id, user.name, user.role, `User ${user.email} logged in successfully`, req.ip || '']
+    );
 
     res.status(200).json({
       success: true,
@@ -106,13 +66,13 @@ const login = async (req, res, next) => {
       data: {
         token,
         user: {
-          id: user._id,
+          id: user.id,
           name: user.name,
           email: user.email,
           role: normalizeRole(user.role),
           department: user.department,
-          registerNumber: user.registerNumber,
-          studentProfileId: user.studentProfileId,
+          registerNumber: user.register_number,
+          studentProfileId: user.student_profile_id,
         },
       },
     });
@@ -127,14 +87,11 @@ const login = async (req, res, next) => {
 const logout = async (req, res, next) => {
   try {
     if (req.user) {
-      await AuditLog.create({
-        userId: req.user._id,
-        userName: req.user.name,
-        userRole: req.user.role,
-        action: 'LOGOUT',
-        details: `User ${req.user.email} logged out`,
-        ipAddress: req.ip || req.connection.remoteAddress || '',
-      });
+      await pool.query(
+        `INSERT INTO audit_logs (user_id, user_name, user_role, action, details, ip_address)
+         VALUES ($1, $2, $3, 'LOGOUT', $4, $5)`,
+        [req.user._id, req.user.name, req.user.role, `User ${req.user.email} logged out`, req.ip || '']
+      );
     }
 
     res.status(200).json({
@@ -151,12 +108,9 @@ const logout = async (req, res, next) => {
 // @access  Private
 const getMe = async (req, res, next) => {
   try {
-    const user = await User.findById(req.user.id);
-    const responseUser = user.toObject();
-    responseUser.role = normalizeRole(responseUser.role);
     res.status(200).json({
       success: true,
-      data: responseUser,
+      data: { ...req.user, role: normalizeRole(req.user.role) },
     });
   } catch (err) {
     next(err);

@@ -9,22 +9,19 @@ const errorHandler = (err, req, res, next) => {
   let message = err.message || 'Internal Server Error';
   let errors = [];
 
-  // Mongoose bad ObjectId
-  if (err.name === 'CastError') {
-    message = `Resource not found with id of ${err.value}`;
-    statusCode = 404;
-  }
-
-  // Mongoose duplicate key
-  if (err.code === 11000) {
-    const field = Object.keys(err.keyValue)[0];
-    const value = err.keyValue[field];
-    message = `Duplicate field value entered: '${value}' for '${field}'. Please use another value.`;
+  if (err.code === '23505') {
+    message = 'A record with this value already exists.';
+    statusCode = 409;
+  } else if (err.code === '23503' || err.code === '22P02' || err.code === '23514') {
+    message = 'The request contains an invalid value or reference.';
     statusCode = 400;
-  }
-
-  // Mongoose validation error
-  if (err.name === 'ValidationError') {
+  } else if (err.code === 11000) {
+    message = 'A record with this value already exists.';
+    statusCode = 409;
+  } else if (err.name === 'CastError') {
+    message = 'The requested record identifier is invalid.';
+    statusCode = 404;
+  } else if (err.name === 'ValidationError') {
     message = 'Validation failed';
     statusCode = 400;
     errors = Object.values(err.errors).map((val) => val.message);

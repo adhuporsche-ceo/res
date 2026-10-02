@@ -1,4 +1,4 @@
-const Student = require('../models/Student');
+const { pool } = require('../config/postgres');
 const { getDashboardMetrics, evaluateMentorAttention, calculateAcademicTrend } = require('../services/insightService');
 
 // @desc    Get dashboard KPIs, charts, and student overview lists
@@ -22,13 +22,14 @@ const getDashboard = async (req, res, next) => {
 const getMentorAttention = async (req, res, next) => {
   try {
     const { reasonType, department } = req.query;
-    const query = {};
+    const values = [];
+    let query = 'SELECT id, profile FROM students WHERE deleted_at IS NULL';
     if (department) {
-      query['personalDetails.department'] = department.toUpperCase();
+      values.push(department.toUpperCase());
+      query += ` AND department = $${values.length}`;
     }
-
-    query.deletedAt = null;
-    const students = await Student.find(query).lean();
+    const { rows } = await pool.query(query, values);
+    const students = rows.map(({ id, profile }) => ({ ...profile, _id: id }));
     let attentionList = [];
 
     students.forEach((s) => {
@@ -95,7 +96,11 @@ const compareStudents = async (req, res, next) => {
       });
     }
 
-    const students = await Student.find({ _id: { $in: idList }, deletedAt: null }).lean();
+    const { rows } = await pool.query(
+      'SELECT id, profile FROM students WHERE id::text = ANY($1::text[]) AND deleted_at IS NULL',
+      [idList]
+    );
+    const students = rows.map(({ id, profile }) => ({ ...profile, _id: id }));
 
     if (students.length < 2) {
       return res.status(404).json({
@@ -152,7 +157,8 @@ const compareStudents = async (req, res, next) => {
 // @access  Private
 const getAnalytics = async (req, res, next) => {
   try {
-    const students = await Student.find({ deletedAt: null }).lean();
+    const { rows } = await pool.query('SELECT id, profile FROM students WHERE deleted_at IS NULL');
+    const students = rows.map(({ id, profile }) => ({ ...profile, _id: id }));
     const total = students.length;
 
     // Technical skills frequency

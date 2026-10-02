@@ -3,7 +3,7 @@
  * Computes academic trends, mentor attention triggers, and college-wide analytics.
  */
 
-const Student = require('../models/Student');
+const { pool } = require('../config/postgres');
 
 /**
  * Computes Academic Trend from chronological semesters
@@ -148,7 +148,8 @@ const evaluateMentorAttention = (student, config = {}) => {
  * Computes college-level dashboard analytics and summary KPIs
  */
 const getDashboardMetrics = async () => {
-  const students = await Student.find({ deletedAt: null }).lean();
+  const { rows } = await pool.query('SELECT id, profile FROM students WHERE deleted_at IS NULL');
+  const students = rows.map(({ id, profile }) => ({ ...profile, _id: id }));
   const totalStudents = students.length;
 
   if (totalStudents === 0) {

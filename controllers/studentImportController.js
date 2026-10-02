@@ -1,5 +1,4 @@
-const Student = require('../models/Student');
-const AuditLog = require('../models/AuditLog');
+const { pool } = require('../config/postgres');
 
 function parseCsv(text) {
   const rows = [];
@@ -27,8 +26,11 @@ function parseCsv(text) {
 
 const validateRows = async (rows) => {
   const registerNumbers = rows.map((row) => row.registernumber).filter(Boolean);
-  const existing = await Student.find({ 'personalDetails.registerNumber': { $in: registerNumbers.map((value) => value.toUpperCase()) } }).select('personalDetails.registerNumber').lean();
-  const existingSet = new Set(existing.map((student) => student.personalDetails.registerNumber));
+  const { rows: existingRows } = await pool.query(
+    'SELECT register_number FROM students WHERE register_number = ANY($1::text[])',
+    [registerNumbers.map((value) => value.toUpperCase())]
+  );
+  const existingSet = new Set(existingRows.map((student) => student.register_number));
   const seen = new Set();
   const valid = [];
   const invalid = [];
@@ -74,15 +76,30 @@ const importStudents = async (req, res, next) => {
       careerGoal: { primaryGoal: row.careergoal || 'Placement' }, consent: true,
       createdBy: req.user._id, createdByRole: req.user.role, updatedBy: req.user._id, updatedByRole: req.user.role,
     }));
-    const inserted = await Student.insertMany(documents);
-    const io = req.app.get('io');
-    if (io) inserted.forEach((student) => {
-      const payload = { id: student._id, department: student.personalDetails.department, mentorId: student.mentorId || null };
-      io.to('role:SUPER_ADMIN').to('role:PLACEMENT_COORDINATOR').to(`dept:${student.personalDetails.department}`).emit('student:created', payload);
-      if (student.mentorId) io.to(`mentor:${student.mentorId}`).emit('student:created', payload);
-      io.emit('eligibility:updated', payload);
-    });
-    await AuditLog.create({ userId: req.user._id, userName: req.user.name, userRole: req.user.role, action: 'STUDENT_IMPORTED', details: JSON.stringify({ count: inserted.length, invalid: result.invalid.length }), ipAddress: req.ip || '' });
+    const client = await pool.connect();
+    const inserted = [];
+    try {
+      await client.query('BEGIN');
+      for (const profile of documents) {
+        const personal = profile.personalDetails;
+        const { rows } = await client.query(
+          `INSERT INTO students (register_number, department, section, created_by, updated_by, profile)
+           VALUES ($1, $2, $3, $4, $4, $5::jsonb)
+           RETURNING id, profile, version, mentor_id, deleted_at, created_at, updated_at`,
+          [personal.registerNumber, personal.department, personal.section, req.user._id, JSON.stringify(profile)]
+        );
+        inserted.push({ ...rows[0].profile, _id: rows[0].id, __v: rows[0].version, createdAt: rows[0].created_at });
+      }
+      await client.query(
+        `INSERT INTO audit_logs (user_id, user_name, user_role, action, details, ip_address)
+         VALUES ($1, $2, $3, 'STUDENT_IMPORTED', $4, $5)`,
+        [req.user._id, req.user.name, req.user.role, JSON.stringify({ count: inserted.length, invalid: result.invalid.length }), req.ip || '']
+      );
+      await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally { client.release(); }
     res.status(201).json({ success: true, message: `${inserted.length} students imported.`, data: { imported: inserted.length, invalid: result.invalid, students: inserted } });
   } catch (error) { next(error); }
 };

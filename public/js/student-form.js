@@ -778,7 +778,7 @@ async function submitStudentForm() {
   btnSubmit.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Saving...';
 
   try {
-    const endpoint = isEditMode ? `/students/${studentId}` : '/students';
+    const endpoint = isEditMode ? `/students/${studentId}` : '/student-applications';
     const method = isEditMode ? 'PUT' : 'POST';
 
     const res = await apiCall(endpoint, {
@@ -787,10 +787,10 @@ async function submitStudentForm() {
     });
 
     if (res.success) {
-      showToast(isEditMode ? 'Student profile updated successfully!' : 'Student profile registered successfully!', 'success');
+      showToast(isEditMode ? 'Student profile updated successfully!' : 'Student application submitted for review.', 'success');
       const targetId = isEditMode ? studentId : res.data._id;
       setTimeout(() => {
-        window.location.href = `student-profile.html?id=${targetId}`;
+        window.location.href = isEditMode ? `student-profile.html?id=${targetId}` : 'student-applications.html';
       }, 1000);
     }
   } catch (err) {

@@ -5,50 +5,29 @@ const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
 const rateLimit = require('express-rate-limit');
-const http = require('http');
-const { Server } = require('socket.io');
-const jwt = require('jsonwebtoken');
+const mongoose = require('mongoose');
 
 // Load environment variables
 dotenv.config();
 
-const { connectDB } = require('./config/db');
 const { notFound, errorHandler } = require('./middleware/errorMiddleware');
-
-// Route files
+const { pool, initializeDatabase } = require('./config/postgres');
 const authRoutes = require('./routes/authRoutes');
+const userRoutes = require('./routes/userRoutes');
+const settingsRoutes = require('./routes/settingsRoutes');
+const auditRoutes = require('./routes/auditRoutes');
+const studentApplicationRoutes = require('./routes/studentApplicationRoutes');
 const studentRoutes = require('./routes/studentRoutes');
 const insightRoutes = require('./routes/insightRoutes');
-const auditRoutes = require('./routes/auditRoutes');
 const reportRoutes = require('./routes/reportRoutes');
-const settingsRoutes = require('./routes/settingsRoutes');
 const compatRoutes = require('./routes/compatRoutes');
-const userRoutes = require('./routes/userRoutes');
+const { protect } = require('./middleware/authMiddleware');
 
 const app = express();
-const httpServer = http.createServer(app);
-const io = new Server(httpServer, { cors: { origin: true, credentials: true } });
-app.set('io', io);
+const fallbackApplications = [];
 
-io.use(async (socket, next) => {
-  try {
-    const token = socket.handshake.auth?.token;
-    if (!token) return next(new Error('Authentication required'));
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'college_student_profiling_jwt_secret_key_viva_2026_secure');
-    const User = require('./models/User');
-    const user = await User.findById(decoded.id).select('-password');
-    if (!user) return next(new Error('User not found'));
-    socket.user = user;
-    next();
-  } catch (error) { next(new Error('Invalid session')); }
-});
-
-io.on('connection', (socket) => {
-  const role = require('./config/permissions').normalizeRole(socket.user.role);
-  socket.join(`role:${role}`);
-  if (socket.user.department) socket.join(`dept:${String(socket.user.department).toUpperCase()}`);
-  socket.join(`mentor:${socket.user._id}`);
-});
+app.locals = app.locals || {};
+app.locals.fallbackApplications = fallbackApplications;
 
 // Body parser
 app.use(express.json({ limit: '10mb' }));
@@ -111,25 +90,32 @@ app.use('/api', limiter);
 // Serve static frontend assets
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Mount API routes
 app.use('/api/auth', authRoutes);
+app.use('/api/users', userRoutes);
+app.use('/api/settings', settingsRoutes);
+app.use('/api/audit-logs', auditRoutes);
+app.use('/api/student-applications', studentApplicationRoutes);
 app.use('/api/students', studentRoutes);
 app.use('/api/insights', insightRoutes);
-app.use('/api/audit-logs', auditRoutes);
 app.use('/api/reports', reportRoutes);
-app.use('/api/settings', settingsRoutes);
-app.use('/api/users', userRoutes);
+app.use('/api', compatRoutes);
 
 // Health check endpoint
-app.get('/api/health', (req, res) => {
-  res.status(200).json({
-    success: true,
-    message: 'Student Profiling System API is running smoothly',
-    timestamp: new Date().toISOString(),
-  });
+app.get('/api/health', async (req, res) => {
+  try {
+    await pool.query('SELECT 1');
+    res.status(200).json({ success: true, database: 'connected', timestamp: new Date().toISOString() });
+  } catch (error) {
+    res.status(503).json({ success: false, database: 'unavailable', timestamp: new Date().toISOString() });
+  }
 });
 
-app.use('/api', compatRoutes);
+app.use('/api', (req, res) => {
+  res.status(404).json({
+    success: false,
+    message: 'API endpoint not found.',
+  });
+});
 
 // Fallback for frontend SPA navigation
 app.get('*', (req, res, next) => {
@@ -143,27 +129,41 @@ app.get('*', (req, res, next) => {
 app.use(notFound);
 app.use(errorHandler);
 
-const { seedInitialData } = require('./seed/seedDataHelper');
-
 const PORT = process.env.PORT || 5000;
 
 const startServer = async () => {
   try {
-    // Connect to database
-    await connectDB();
+    if (process.env.MONGODB_URI) {
+      try {
+        await mongoose.connect(process.env.MONGODB_URI, {
+          dbName: process.env.MONGODB_DB_NAME || 'studentProfilingSystem',
+          serverSelectionTimeoutMS: 10000,
+          connectTimeoutMS: 10000,
+        });
+        console.log('MongoDB Atlas connected successfully.');
+      } catch (mongoErr) {
+        console.warn('MongoDB Atlas connection failed. Continuing in fallback mode:', mongoErr.message);
+      }
+    } else {
+      console.log('MongoDB Atlas URI not configured; continuing without MongoDB connection.');
+    }
 
-    // Auto-seed demo data if database is empty
-    await seedInitialData();
+    try {
+      await initializeDatabase();
+    } catch (dbErr) {
+      console.warn('PostgreSQL initialization warning:', dbErr.message || dbErr);
+    }
 
-    httpServer.listen(PORT, () => {
+    app.listen(PORT, () => {
       console.log(`\n======================================================`);
       console.log(`Student Academic Personal and Career Profiling System`);
       console.log(`Server running in ${process.env.NODE_ENV || 'development'} mode on http://localhost:${PORT}`);
-      console.log(`Ready for college faculty & mentor access.`);
+      console.log(`MongoDB Atlas connected: ${mongoose.connection.readyState === 1 ? 'yes' : 'no'}`);
       console.log(`======================================================\n`);
     });
   } catch (err) {
-    console.error('Failed to start server:', err.message);
+    const reason = err.code || err.name || err.message;
+    console.error('Failed to start backend:', reason);
     process.exit(1);
   }
 };

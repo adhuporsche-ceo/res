@@ -15,7 +15,7 @@ const {
   deleteArrear,
   addIntervention,
   updateIntervention,
-} = require('../controllers/studentController');
+} = require('../controllers/postgresStudentController');
 const { protect, can } = require('../middleware/authMiddleware');
 const { importStudents, downloadTemplate } = require('../controllers/studentImportController');
 

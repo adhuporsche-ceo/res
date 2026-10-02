@@ -1,4 +1,4 @@
-const Student = require('../models/Student');
+const { pool } = require('../config/postgres');
 const { ROLES } = require('../config/permissions');
 
 // Helper to escape CSV cell content
@@ -14,14 +14,26 @@ const escapeCsv = (val) => {
 const exportReport = async (req, res, next) => {
   try {
     const { type = 'students', department } = req.query;
-    const query = { deletedAt: null };
-    if (req.user.role === ROLES.HOD) query['personalDetails.department'] = String(req.user.department || '').toUpperCase();
-    if (req.user.role === ROLES.FACULTY_MENTOR) query.mentorId = req.user._id;
+    const filters = ['deleted_at IS NULL'];
+    const values = [];
+    if (req.user.role === ROLES.HOD) {
+      values.push(String(req.user.department || '').toUpperCase());
+      filters.push(`department = $${values.length}`);
+    }
+    if (req.user.role === ROLES.FACULTY_MENTOR) {
+      values.push(req.user._id);
+      filters.push(`mentor_id = $${values.length}`);
+    }
     if (department && department.trim() !== '') {
-      query['personalDetails.department'] = department.trim().toUpperCase();
+      values.push(department.trim().toUpperCase());
+      filters.push(`department = $${values.length}`);
     }
 
-    const students = await Student.find(query).lean();
+    const { rows } = await pool.query(
+      `SELECT id, mentor_id, profile FROM students WHERE ${filters.join(' AND ')}`,
+      values
+    );
+    const students = rows.map(({ id, mentor_id, profile }) => ({ ...profile, _id: id, mentorId: mentor_id }));
     let csvRows = [];
     let filename = `report_${type}_${Date.now()}.csv`;
 

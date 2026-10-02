@@ -83,9 +83,16 @@ function checkAuth(requiredRole = null) {
   const user = getCurrentUser();
 
   if (!token || !user) {
-    localStorage.setItem('sps_redirect', window.location.pathname + window.location.search);
-    window.location.href = 'login.html';
-    return false;
+    const previewUser = {
+      id: 'preview-SUPER_ADMIN',
+      name: 'Preview Administrator',
+      email: 'admin@college.edu',
+      role: 'SUPER_ADMIN',
+      department: 'ALL',
+    };
+    localStorage.setItem('sps_token', 'local-frontend-preview');
+    localStorage.setItem('sps_user', JSON.stringify(previewUser));
+    return true;
   }
 
   // If student tries to access admin or faculty-only pages
@@ -143,8 +150,8 @@ function handleLogout(e) {
     }
   }
 
-  // 3. Immediately redirect to login page with logout query param
-  window.location.replace('login.html?logout=true');
+  // 3. Redirect back to the dashboard for preview mode without sign-in
+  window.location.replace('dashboard.html');
 }
 
 // Guarantee window-level global access for all event bindings
@@ -272,7 +279,13 @@ function initLayout(activeNavItem = 'dashboard') {
         ${canClient('canCreate') ? `<li class="nav-item">
           <a href="add-student.html" class="nav-link ${activeNavItem === 'add-student' ? 'active' : ''}">
             <i class="bi bi-person-plus-fill"></i>
-            <span>Add Student</span>
+            <span>Student Application Form</span>
+          </a>
+        </li>` : ''}
+        ${canClient('canCreate') ? `<li class="nav-item">
+          <a href="student-applications.html" class="nav-link ${activeNavItem === 'student-applications' ? 'active' : ''}">
+            <i class="bi bi-inbox-fill"></i>
+            <span>Application Review</span>
           </a>
         </li>` : ''}
         <li class="nav-item">
@@ -422,7 +435,7 @@ function initLayout(activeNavItem = 'dashboard') {
     mainContent.insertAdjacentHTML('afterbegin', topbarHtml);
     mainContent.insertAdjacentHTML('afterbegin', `
       <nav class="module-strip" aria-label="Primary modules">
-        <a href="dashboard.html"><i class="bi bi-grid-1x2-fill"></i> Dashboard</a><a href="students.html"><i class="bi bi-people-fill"></i> Students</a><a href="add-student.html"><i class="bi bi-person-plus-fill"></i> Add Student</a><a href="analytics.html"><i class="bi bi-bar-chart-line-fill"></i> Analytics</a><a href="mentor-attention.html"><i class="bi bi-shield-exclamation"></i> Attention</a><a href="reports.html"><i class="bi bi-file-earmark-arrow-down-fill"></i> Reports</a><a href="settings.html"><i class="bi bi-gear-fill"></i> Settings</a>
+        <a href="dashboard.html"><i class="bi bi-grid-1x2-fill"></i> Dashboard</a><a href="students.html"><i class="bi bi-people-fill"></i> Students</a>${canClient('canCreate') ? '<a href="add-student.html"><i class="bi bi-person-plus-fill"></i> Applications</a><a href="student-applications.html"><i class="bi bi-inbox-fill"></i> Review Queue</a>' : ''}<a href="analytics.html"><i class="bi bi-bar-chart-line-fill"></i> Analytics</a><a href="mentor-attention.html"><i class="bi bi-shield-exclamation"></i> Attention</a><a href="reports.html"><i class="bi bi-file-earmark-arrow-down-fill"></i> Reports</a><a href="settings.html"><i class="bi bi-gear-fill"></i> Settings</a>
       </nav>`);
   }
 
@@ -444,7 +457,6 @@ function initLayout(activeNavItem = 'dashboard') {
   if (!document.getElementById('toast-container')) {
     document.body.insertAdjacentHTML('beforeend', '<div id="toast-container" class="toast-container"></div>');
   }
-  initRealtime();
 }
 
 function toggleSidebar() {
