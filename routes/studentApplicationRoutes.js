@@ -8,12 +8,7 @@ const {
 
 const router = express.Router();
 
-router.post('/', protect, (req, res, next) => {
-  if (req.user.role !== 'STUDENT') {
-    return res.status(403).json({ success: false, message: 'Only student accounts can submit applications.' });
-  }
-  next();
-}, submitApplication);
+router.post('/', submitApplication);
 router.get('/', protect, canAny('student.view.all', 'student.create'), listApplications);
 router.patch('/:id/status', protect, can('student.create'), reviewApplication);
 

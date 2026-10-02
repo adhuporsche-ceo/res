@@ -20,6 +20,9 @@ const loadApplications = async () => {
   try {
     const result = await apiCall(`/student-applications?status=${encodeURIComponent(status)}`);
     const applications = result.data || [];
+    const message = document.getElementById('applicationMessage');
+    message.classList.add('d-none');
+    message.textContent = '';
     document.getElementById('applicationCount').textContent = `${applications.length} application${applications.length === 1 ? '' : 's'}`;
 
     if (!applications.length) {

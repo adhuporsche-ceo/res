@@ -29,7 +29,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const currentUser = getCurrentUser();
   const isStudentSubmission = normalizeClientRole(currentUser?.role) === 'STUDENT';
 
-  if ((!isEditMode && !isStudentSubmission) || (isEditMode && !canClient('canEdit'))) {
+  if ((!isEditMode && !isStudentSubmission && !canClient('canCreate')) || (isEditMode && !canClient('canEdit'))) {
     initLayout('students');
     showToast('Not authorized for this action.', 'danger');
     setTimeout(() => { window.location.href = 'dashboard.html'; }, 700);
