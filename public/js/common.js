@@ -83,6 +83,12 @@ function checkAuth(requiredRole = null) {
   const user = getCurrentUser();
 
   if (!token || !user) {
+    const currentPath = window.location.pathname.split('/').pop() || '';
+    if (currentPath === 'add-student.html') {
+      window.location.replace('login.html');
+      return false;
+    }
+
     const previewUser = {
       id: 'preview-SUPER_ADMIN',
       name: 'Preview Administrator',
@@ -98,7 +104,7 @@ function checkAuth(requiredRole = null) {
   // If student tries to access admin or faculty-only pages
   const role = normalizeClientRole(user.role);
   if (role === 'STUDENT') {
-    const facultyPages = ['dashboard.html', 'add-student.html', 'edit-student.html', 'students.html', 'analytics.html', 'mentor-attention.html', 'reports.html', 'audit-logs.html'];
+    const facultyPages = ['dashboard.html', 'edit-student.html', 'students.html', 'analytics.html', 'mentor-attention.html', 'reports.html', 'audit-logs.html', 'student-applications.html'];
     const currentPath = window.location.pathname.split('/').pop() || '';
     if (facultyPages.includes(currentPath)) {
       window.location.href = `student-profile.html?id=${user.studentProfileId || ''}`;
@@ -239,6 +245,12 @@ function initLayout(activeNavItem = 'dashboard') {
   const navItemsHtml = isStudent
     ? `
         <li class="nav-item">
+          <a href="add-student.html" class="nav-link ${activeNavItem === 'add-student' ? 'active' : ''}">
+            <i class="bi bi-person-plus-fill"></i>
+            <span>Student Application Form</span>
+          </a>
+        </li>
+        <li class="nav-item">
           <a href="student-profile.html?id=${studentProfileId}" class="nav-link ${activeNavItem === 'students' || activeNavItem === 'profile' ? 'active' : ''}">
             <i class="bi bi-person-badge-fill"></i>
             <span>My Student Profile</span>
@@ -276,12 +288,6 @@ function initLayout(activeNavItem = 'dashboard') {
             <span>Students Directory</span>
           </a>
         </li>
-        ${canClient('canCreate') ? `<li class="nav-item">
-          <a href="add-student.html" class="nav-link ${activeNavItem === 'add-student' ? 'active' : ''}">
-            <i class="bi bi-person-plus-fill"></i>
-            <span>Student Application Form</span>
-          </a>
-        </li>` : ''}
         ${canClient('canCreate') ? `<li class="nav-item">
           <a href="student-applications.html" class="nav-link ${activeNavItem === 'student-applications' ? 'active' : ''}">
             <i class="bi bi-inbox-fill"></i>
@@ -433,16 +439,18 @@ function initLayout(activeNavItem = 'dashboard') {
   const mainContent = document.getElementById('main-content');
   if (mainContent) {
     mainContent.insertAdjacentHTML('afterbegin', topbarHtml);
-    mainContent.insertAdjacentHTML('afterbegin', `
-      <nav class="module-strip" aria-label="Primary modules">
-        <a href="dashboard.html"><i class="bi bi-grid-1x2-fill"></i> Dashboard</a><a href="students.html"><i class="bi bi-people-fill"></i> Students</a>${canClient('canCreate') ? '<a href="add-student.html"><i class="bi bi-person-plus-fill"></i> Applications</a><a href="student-applications.html"><i class="bi bi-inbox-fill"></i> Review Queue</a>' : ''}<a href="analytics.html"><i class="bi bi-bar-chart-line-fill"></i> Analytics</a><a href="mentor-attention.html"><i class="bi bi-shield-exclamation"></i> Attention</a><a href="reports.html"><i class="bi bi-file-earmark-arrow-down-fill"></i> Reports</a><a href="settings.html"><i class="bi bi-gear-fill"></i> Settings</a>
-      </nav>`);
+    const moduleLinks = isStudent
+      ? `<a href="student-profile.html?id=${studentProfileId}"><i class="bi bi-person-badge-fill"></i> My Profile</a><a href="add-student.html"><i class="bi bi-person-plus-fill"></i> Application Form</a><a href="settings.html"><i class="bi bi-gear-fill"></i> Settings</a>`
+      : `<a href="dashboard.html"><i class="bi bi-grid-1x2-fill"></i> Dashboard</a><a href="students.html"><i class="bi bi-people-fill"></i> Students</a>${canClient('canCreate') ? '<a href="student-applications.html"><i class="bi bi-inbox-fill"></i> Review Queue</a>' : ''}<a href="analytics.html"><i class="bi bi-bar-chart-line-fill"></i> Analytics</a><a href="mentor-attention.html"><i class="bi bi-shield-exclamation"></i> Attention</a><a href="reports.html"><i class="bi bi-file-earmark-arrow-down-fill"></i> Reports</a><a href="settings.html"><i class="bi bi-gear-fill"></i> Settings</a>`;
+    mainContent.insertAdjacentHTML('afterbegin', `<nav class="module-strip" aria-label="Primary modules">${moduleLinks}</nav>`);
   }
 
-  apiCall('/insights/mentor-attention').then((result) => {
-    const badge = document.getElementById('attentionBadge');
-    if (badge && result.data) badge.textContent = result.data.totalAttentionCount || 0;
-  }).catch(() => {});
+  if (!isStudent) {
+    apiCall('/insights/mentor-attention').then((result) => {
+      const badge = document.getElementById('attentionBadge');
+      if (badge && result.data) badge.textContent = result.data.totalAttentionCount || 0;
+    }).catch(() => {});
+  }
 
   // Attach direct event listeners to all logout triggers
   setTimeout(() => {

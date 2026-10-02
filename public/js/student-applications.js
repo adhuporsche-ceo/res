@@ -30,6 +30,7 @@ const loadApplications = async () => {
     body.innerHTML = applications.map((item) => {
       const profile = item.application || {};
       const personal = profile.personalDetails || {};
+      const applicationId = item._id || item.id;
       const canReview = status === 'PENDING';
       const submittedAt = item.submittedAt ? new Date(item.submittedAt).toLocaleString() : '';
       const details = escapeApplicationHtml(JSON.stringify(profile, null, 2));
@@ -39,7 +40,7 @@ const loadApplications = async () => {
         <td>${escapeApplicationHtml(personal.department)} / ${escapeApplicationHtml(personal.section)}</td>
         <td>${escapeApplicationHtml(submittedAt)}</td>
         <td><details><summary>View details</summary><pre class="small text-wrap mt-2 mb-0" style="max-width: 480px; white-space: pre-wrap">${details}</pre></details></td>
-        <td class="text-end text-nowrap">${canReview ? `<button class="btn btn-sm btn-success me-1" data-review="APPROVED" data-id="${escapeApplicationHtml(item.id)}" type="button" title="Approve and add to directory" aria-label="Approve ${escapeApplicationHtml(item.registerNumber)}"><i class="bi bi-check-lg"></i></button><button class="btn btn-sm btn-outline-danger" data-review="REJECTED" data-id="${escapeApplicationHtml(item.id)}" type="button" title="Reject application" aria-label="Reject ${escapeApplicationHtml(item.registerNumber)}"><i class="bi bi-x-lg"></i></button>` : escapeApplicationHtml(item.status)}</td>
+        <td class="text-end text-nowrap">${canReview ? `<button class="btn btn-sm btn-success me-1" data-review="APPROVED" data-id="${escapeApplicationHtml(applicationId)}" type="button" title="Approve and add to directory" aria-label="Approve ${escapeApplicationHtml(item.registerNumber)}"><i class="bi bi-check-lg"></i></button><button class="btn btn-sm btn-outline-danger" data-review="REJECTED" data-id="${escapeApplicationHtml(applicationId)}" type="button" title="Reject application" aria-label="Reject ${escapeApplicationHtml(item.registerNumber)}"><i class="bi bi-x-lg"></i></button>` : escapeApplicationHtml(item.status)}</td>
       </tr>`;
     }).join('');
   } catch (error) {

@@ -50,6 +50,7 @@ app.use(
           'https://cdn.jsdelivr.net',
           'https://cdnjs.cloudflare.com',
         ],
+        scriptSrcAttr: ["'unsafe-inline'"],
         styleSrc: [
           "'self'",
           "'unsafe-inline'",
@@ -154,12 +155,20 @@ const startServer = async () => {
       console.warn('PostgreSQL initialization warning:', dbErr.message || dbErr);
     }
 
-    app.listen(PORT, () => {
+    const server = app.listen(PORT, () => {
       console.log(`\n======================================================`);
       console.log(`Student Academic Personal and Career Profiling System`);
       console.log(`Server running in ${process.env.NODE_ENV || 'development'} mode on http://localhost:${PORT}`);
       console.log(`MongoDB Atlas connected: ${mongoose.connection.readyState === 1 ? 'yes' : 'no'}`);
       console.log(`======================================================\n`);
+    });
+    server.on('error', (error) => {
+      if (error.code === 'EADDRINUSE') {
+        console.error(`Port ${PORT} is already in use. The app may already be running at http://localhost:${PORT}. Stop the existing server or set PORT to another value.`);
+      } else {
+        console.error('Backend listener failed:', error.message);
+      }
+      process.exitCode = 1;
     });
   } catch (err) {
     const reason = err.code || err.name || err.message;

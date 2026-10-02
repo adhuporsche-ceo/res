@@ -26,8 +26,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   const urlParams = new URLSearchParams(window.location.search);
   studentId = urlParams.get('id');
   isEditMode = Boolean(studentId && (window.location.pathname.includes('edit-student') || studentId));
+  const currentUser = getCurrentUser();
+  const isStudentSubmission = normalizeClientRole(currentUser?.role) === 'STUDENT';
 
-  if ((!isEditMode && !canClient('canCreate')) || (isEditMode && !canClient('canEdit'))) {
+  if ((!isEditMode && !isStudentSubmission) || (isEditMode && !canClient('canEdit'))) {
     initLayout('students');
     showToast('Not authorized for this action.', 'danger');
     setTimeout(() => { window.location.href = 'dashboard.html'; }, 700);
@@ -48,6 +50,12 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     await loadStudentDataForEdit(studentId);
   } else {
+    const registerNumberInput = document.getElementById('pdRegisterNumber');
+    if (isStudentSubmission) {
+      registerNumberInput.value = String(currentUser.registerNumber || '').toUpperCase();
+      registerNumberInput.readOnly = true;
+    }
+
     // Initial dynamic sample or empty setup
     renderSemesterTable();
     renderArrearTable();

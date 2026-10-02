@@ -72,6 +72,8 @@ a { color: var(--fg); }
 .page-header { margin-bottom: var(--space-6); }
 .page-title { color: var(--fg); letter-spacing: 0; }
 .page-subtitle { color: var(--fg); }
+.form-step-section { display: none; }
+.form-step-section.active { display: block; }
 .wizard-steps-nav { display: grid; grid-template-columns: repeat(8, minmax(92px, 1fr)); gap: var(--space-2); width: 100%; margin: 0 0 var(--space-6); padding: var(--space-3); overflow-x: auto; border: 1px solid var(--border); background: var(--blue-100); }
 .wizard-step-item { min-height: 76px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--space-2); padding: var(--space-2); color: var(--fg); border: 1px solid transparent; cursor: pointer; text-align: center; white-space: nowrap; }
 .wizard-step-item:hover, .wizard-step-item:focus-visible { border-color: var(--border); background: var(--blue-200); outline: none; }

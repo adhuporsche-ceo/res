@@ -30,6 +30,10 @@ const submitApplication = async (req, res, next) => {
   const registerNumber = application.personalDetails.registerNumber.trim().toUpperCase();
   const department = application.personalDetails.department.trim().toUpperCase();
   const section = application.personalDetails.section.trim().toUpperCase();
+  const accountRegisterNumber = String(req.user.registerNumber || '').trim().toUpperCase();
+  if (!accountRegisterNumber || registerNumber !== accountRegisterNumber) {
+    return res.status(403).json({ success: false, message: 'The application register number must match your student account.' });
+  }
 
   try {
     if (mongoose.connection.readyState === 1) {
@@ -110,8 +114,9 @@ const reviewApplication = async (req, res, next) => {
     return res.status(400).json({ success: false, message: 'Status must be APPROVED or REJECTED.' });
   }
 
-  const client = await pool.connect();
+  let client;
   try {
+    client = await pool.connect();
     await client.query('BEGIN');
     const { rows } = await client.query(
       'SELECT * FROM student_applications WHERE id = $1 FOR UPDATE',
@@ -164,13 +169,22 @@ const reviewApplication = async (req, res, next) => {
     await client.query('COMMIT');
     res.json({ success: true, data: { ...updated.rows[0], studentId } });
   } catch (error) {
-    await client.query('ROLLBACK');
+    if (client) {
+      try {
+        await client.query('ROLLBACK');
+      } catch (rollbackError) {
+        console.error('Application review rollback failed:', rollbackError.message);
+      }
+    }
     if (error.code === '23505') {
       return res.status(409).json({ success: false, message: 'A student profile with this register number already exists.' });
     }
+    if (error.code === 'ECONNREFUSED' || error.code === 'ECONNRESET') {
+      return res.status(503).json({ success: false, message: 'PostgreSQL is unavailable. Application review cannot be completed right now.' });
+    }
     next(error);
   } finally {
-    client.release();
+    if (client) client.release();
   }
 };
 
